@@ -1,0 +1,122 @@
+fullnameOverride: prometheus-k8s
+defaultRules:
+ create: false
+kubeEtcd:
+ enabled: false # Disable ServiceMonitor scraping of etcd. Not possible in EKS.
+kubeScheduler:
+ enabled: false # Disable ServiceMonitor scraping of kube scheduler. Not possible in EKS.
+kubeProxy:
+ enabled: false # Disable ServiceMonitor scraping of kube-proxy. they are not exposed on EKS https://github.com/aws/containers-roadmap/issues/657
+kubeControllerManager:
+ enabled: false
+kubeStateMetrics:
+ enabled: true
+nodeExporter:
+ enabled: true
+kube-state-metrics:
+ fullnameOverride: kube-state-metrics
+ nodeSelector:
+   nodegroup-name: ng-monitoring-tools
+ tolerations:
+ - key: dedicated
+   operator: Equal
+   value: monitoring-tools
+ prometheusScrape: false # disable duplicate scraping via service annotation.
+ service:
+   annotations:
+     prometheus.io/scrape: "false"
+prometheus-node-exporter:
+ fullnameOverride: node-exporter
+ service:
+   annotations:
+     prometheus.io/scrape: "false" # disable duplicate scraping via service annotation.
+prometheusOperator:
+ enabled: true
+ nodeSelector:
+   nodegroup-name: ng-monitoring-tools
+ tolerations:
+ - key: dedicated
+   operator: Equal
+   value: monitoring-tools
+prometheus:
+ enabled: true
+ serviceAccount:
+   create: true
+   name: "${sa_write_name}"
+   annotations:
+     eks.amazonaws.com/role-arn: "${iam_role_arn_write}"
+ prometheusSpec:
+   podMonitorSelectorNilUsesHelmValues: false # for podMonitor discovery to work without default labels
+   serviceMonitorSelectorNilUsesHelmValues: false # for serviceMonitor discovery to work without default labels
+   ruleSelectorNilUsesHelmValues: false # for prometheusRule discovery to work without default labels
+   externalUrl: ''
+   retention: 14d
+   nodeSelector:
+     nodegroup-name: ng-monitoring-tools
+   tolerations:
+   - key: dedicated
+     operator: Equal
+     value: monitoring-tools
+   remoteWrite:
+   - url: ${amp_endpoint}api/v1/remote_write
+     sigv4:
+       region: ${region}
+     queueConfig:
+       maxSamplesPerSend: 1000
+       maxShards: 200
+       capacity: 2500
+   storageSpec:
+     volumeClaimTemplate:
+       spec:
+         storageClassName: gp2
+         accessModes: ["ReadWriteOnce"]
+         resources:
+           requests:
+             storage: 50Gi
+alertmanager:
+ enabled: true
+ nodeSelector:
+   nodegroup-name: ng-monitoring-tools
+ tolerations:
+ - key: dedicated
+   operator: Equal
+   value: monitoring-tools
+ alertmanagerSpec:
+   useExistingSecret: false
+   configSecret: prometheus-k8s-alertmanager
+   storage:
+     volumeClaimTemplate:
+       spec:
+         storageClassName: gp2
+         accessModes: ["ReadWriteOnce"]
+         resources:
+           requests:
+             storage: 10Gi
+grafana:
+ nodeSelector:
+   nodegroup-name: ng-monitoring-tools
+ tolerations:
+ - key: dedicated
+   operator: Equal
+   value: monitoring-tools
+ adminPassword: admin
+ grafana.ini:
+   auth:
+     sigv4_auth_enabled: true
+ serviceAccount:
+   name: "${sa_query_name}"
+   annotations:
+     eks.amazonaws.com/role-arn: "${iam_role_arn_query}"
+ sidecar:
+   dashboards:
+     enabled: true
+     label: grafana_dashboard # Generate dashboards from configMaps that has this lable set. grafana_dashboard: "1"
+ persistence:
+   type: pvc
+   enabled: true
+   storageClassName: gp2
+   accessModes:
+     - ReadWriteOnce
+   size: 10Gi
+
+ 
